@@ -17,56 +17,44 @@ int compLZSS(void *compressedDATA, uint32_t *compressedDataSize, void *uncompres
     
     adler32 = lzadler32(uncompressedDATA, uncompressedDataSize);
     
-    uint8_t *cmpLen;
+    uint32_t cmpLen = (compress_lzss(compressedDATA, (uncompressedDataSize)+256, uncompressedDATA, uncompressedDataSize)-(uint8_t*)compressedDATA);
+
+    void *nb = malloc(cmpLen+0x180);
+    bzero(nb, cmpLen+0x180);
     
-    cmpLen = malloc(uncompressedDataSize+(uncompressedDataSize/0x40));
-    
-    uint32_t result = (uint32_t)((compress_lzss(compressedDATA, (uncompressedDataSize*2), uncompressedDATA, uncompressedDataSize)-cmpLen)+*compressedDataSize);
-    
-    free(cmpLen);
-    
-    void *nb = malloc(result+0x180);
-    bzero(nb, result+0x180);
-    
-    memcpy(nb+0x180, compressedDATA, result);
+    memcpy(nb+0x180, compressedDATA, cmpLen);
     
     *(uint64_t*)nb = 0x73737A6C706D6F63; //complzss
     *(uint32_t*)(nb+0x8) = OSSwapInt32(adler32); //adler32
     *(uint32_t*)(nb+0xC) = OSSwapInt32(uncompressedDataSize); //uncompressed data size
-    *(uint32_t*)(nb+0x10) = OSSwapInt32(result); //compressed data size
+    *(uint32_t*)(nb+0x10) = OSSwapInt32(cmpLen); //compressed data size
     *(uint32_t*)(nb+0x14) = OSSwapInt32(0x1); //always 1
     
-    memcpy(compressedDATA, nb, result+0x180);
+    memcpy(compressedDATA, nb, cmpLen+0x180);
     
     free(nb);
     
-    *compressedDataSize = result;
-    
+    *compressedDataSize = (cmpLen+0x180);
+
     return 0;
 }
 
-
-int reLzss(void *filebuf, uint32_t len, void *outBuf, uint32_t *outBufLen) {
+int reLzss(void *filebuf, size_t len, void *outBuf, size_t *outBufLen) {
     void *compressedData = malloc(len);
     
-    uint32_t *len2 = (uint32_t*)malloc(sizeof(uint32_t));
-    
-    *len2 = len;
-    
-    compLZSS(compressedData, len2, filebuf, len);
-    
-    if (!(*len2 && len)) {
+    compLZSS(compressedData, outBufLen, filebuf, len);
+
+    if (!len || !(*outBufLen < len) || !outBufLen) {
+        printf("Error compressing data\n");
         return -1;
     }
-    
-    *outBufLen = (*len2+0x180);
-    
-    bzero(outBuf, (*outBufLen-0x180));
-    
-    memcpy(outBuf, compressedData, *len2+0x180);
-    
+
+    bzero(outBuf, *outBufLen);
+
+    memcpy(outBuf, compressedData, *outBufLen);
+
     free(compressedData);
-    
+
     return 0;
 }
 
@@ -103,11 +91,13 @@ int main(int argc, const char **argv) {
     }
     
     void *inBuf = (void*)malloc(inLen);
+    
     if (!inBuf) {
         printf("Failed to allocate memory for %s\n", inFile);
         fclose(inf);
         return -1;
     }
+
     bzero(inBuf, inLen);
     
     size_t read = fread(inBuf, 1, inLen, inf);
@@ -158,7 +148,7 @@ int main(int argc, const char **argv) {
     size_t written = fwrite(outBuf, 1, inLen, outf);
     
     if (written == inLen) {
-        printf("Success\n");
+        printf("Successfully wrote packed lzss object to %s\n", outFile);
     }
     else {
         printf("Error: wrote %lu bytes, wanted %lu\n", written, inLen);
