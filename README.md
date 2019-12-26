@@ -1,4 +1,5 @@
 # relzss
-Pack a file into an lzss archive
+Pack a file into an lzss archive with an iBoot-friendly "complzss" header
 
-cc relzss.c lzss.c -o relzss
+Usage: relzss inFile outFile (monitor)
+Compiling: cc relzss.c lzss.c -o relzss
